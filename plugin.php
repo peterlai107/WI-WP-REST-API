@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: WP REST API
+ * Plugin Name: WI WP REST API
  * Description: JSON-based REST API for WordPress, developed as part of GSoC 2013.
  * Version: 1.2.3
  * Author: Peter Lai
