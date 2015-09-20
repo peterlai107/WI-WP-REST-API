@@ -224,6 +224,19 @@ class WP_JSON_Posts {
 		// Special parameter handling
 		$query['paged'] = absint( $page );
 
+		//***validate cookie ,peter modify
+		//modified@20150918,發現server.php那隻的登入不會繼承至此,故再登入一次
+		$user_id = wp_validate_auth_cookie($cookie, 'logged_in');
+		if ($user_id) {
+		//echo 'user_id' . $user_id . '<br>'; 
+		       $user = get_userdata($user_id);
+		        wp_set_current_user($user->ID, $user->user_login);
+		}else{
+		//echo 'validate failed<br>';
+		//do nothing
+		}
+		//***validate cookie ,peter modify
+
 		$post_query = new WP_Query();
 		$posts_list = $post_query->query( $query );
 
@@ -375,6 +388,13 @@ class WP_JSON_Posts {
 
 		$response->link_header( 'alternate',  get_permalink( $id ), array( 'type' => 'text/html' ) );
 		$response->set_data( $post );
+
+		//<!--peter modify,support wordpress popular posts plugin
+		if ( is_plugin_active( 'wordpress-popular-posts/wordpress-popular-posts.php' ) ) {
+		  //plugin is activated
+		  $this->__update_views($post['ID']);
+		} 
+		//peter modify,support wordpress popular posts plugin-->
 
 		return $response;
 	}
@@ -1285,4 +1305,112 @@ class WP_JSON_Posts {
 
 		return json_check_post_permission( $post, 'edit' );
 	}
+
+
+
+	//<!-- support wordpress polular posts plugin view count , code from wpp
+
+	/**
+	 * Updates views count.
+	 *
+	 * @since	1.4.0
+	 * @global	object	$wpdb
+	 * @param	int				Post ID
+	 * @return	bool|int		FALSE if query failed, TRUE on success
+	 */
+	private function __update_views($id) {
+
+		/*
+		TODO:
+		For WordPress Multisite, we must define the DIEONDBERROR constant for database errors to display like so:
+		<?php define( 'DIEONDBERROR', true ); ?>
+		*/
+
+
+		global $wpdb;
+		$table = $wpdb->prefix . "popularposts";
+		$wpdb->show_errors();
+
+		// WPML support, get original post/page ID
+		if ( defined('ICL_LANGUAGE_CODE') && function_exists('icl_object_id') ) {
+			global $sitepress;
+			if ( isset( $sitepress )) { // avoids a fatal error with Polylang
+				$id = icl_object_id( $id, get_post_type( $id ), true, $sitepress->get_default_language() );
+			}
+			else if ( function_exists( 'pll_default_language' ) ) { // adds Polylang support
+				$id = icl_object_id( $id, get_post_type( $id ), true, pll_default_language() );
+			}
+		}
+
+
+		$now = $this->__now();
+		$curdate = $this->__curdate();
+		$views = ( $this->user_settings['tools']['sampling']['active'] )
+		  ? $this->user_settings['tools']['sampling']['rate']
+		  : 1;
+		
+		// Allow WP themers / coders perform an action
+		// before updating views count
+		if ( has_action( 'wpp_pre_update_views' ) )
+			do_action( 'wpp_pre_update_views', $id, $views );
+
+		// Update all-time table
+		$result1 = $wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$table}data
+			(postid, day, last_viewed, pageviews) VALUES (%d, %s, %s, %d)
+			ON DUPLICATE KEY UPDATE pageviews = pageviews + %4\$d, last_viewed = '%3\$s';",
+			$id,
+			$now,
+			$now,
+			$views
+		));
+
+		// Update range (summary) table
+		$result2 = $wpdb->query( $wpdb->prepare(
+			"INSERT INTO {$table}summary
+			(postid, pageviews, view_date, last_viewed) VALUES (%d, %d, %s, %s)
+			ON DUPLICATE KEY UPDATE pageviews = pageviews + %2\$d, last_viewed = '%4\$s';",
+			$id,
+			$views,
+			$curdate,
+			$now
+		));
+
+		if ( !$result1 || !$result2 )
+			return false;
+
+		// Allow WP themers / coders perform an action
+		// after updating views count
+		if ( has_action( 'wpp_post_update_views' ) )
+			do_action( 'wpp_post_update_views', $id );
+
+		return true;
+
+	} // end __update_views
+
+
+
+	/**
+	 * Returns server datetime
+	 *
+	 * @since	2.1.6
+	 * @return	string
+	 */
+	private function __curdate() {
+		return gmdate( 'Y-m-d', ( time() + ( get_site_option( 'gmt_offset' ) * 3600 ) ));
+	} // end __curdate
+
+	/**
+	 * Returns mysql datetime
+	 *
+	 * @since	2.1.6
+	 * @return	string
+	 */
+	private function __now() {
+		return current_time('mysql');
+	} // end __now
+
+	// support wordpress polular posts plugin view count-->
+
+
 }

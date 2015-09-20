@@ -313,6 +313,7 @@ class WP_JSON_Server implements WP_JSON_ResponseHandler {
 									'author.nickname',
 									'content',
 									'excerpt',
+									'link',
 									'post_meta._bbp_reply_count',
 									'post_meta._bbp_topic_count',
 									'status',
